@@ -17,6 +17,8 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+    env:
+      PRE_COMMIT_HOME: ~/.cache/pre-commit
 
     steps:
     - uses: actions/checkout@v3
@@ -26,6 +28,15 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
         cache: "pip"
+
+    - name: Cache pre-commit
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pre-commit
+        key: ${{ runner.os }}-pre-commit-${{ matrix.python-version }}-${{ hashFiles('.pre-commit-config.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pre-commit-${{ matrix.python-version }}-
+          ${{ runner.os }}-pre-commit-
 
     - name: Install uv
       run: pip install uv
