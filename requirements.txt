@@ -8,5 +8,6 @@ python-dotenv
 xlsxwriter
 schedule
 pytest
+pytest-cov
 streamlit
 matplotlib

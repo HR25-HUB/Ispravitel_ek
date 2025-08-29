@@ -54,5 +54,12 @@ jobs:
     - name: Run pre-commit (lint/format)
       run: pre-commit run --all-files --show-diff-on-failure
 
-    - name: Run Tests
-      run: pytest
+    - name: Run Tests with coverage
+      run: |
+        pytest --cov=. --cov-report=xml --cov-report=term
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-${{ matrix.python-version }}
+        path: coverage.xml
