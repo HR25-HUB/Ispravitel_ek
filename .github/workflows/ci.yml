@@ -14,6 +14,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v3
@@ -21,7 +24,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: "3.11"
+        python-version: ${{ matrix.python-version }}
         cache: "pip"
 
     - name: Install uv
@@ -40,8 +43,5 @@ jobs:
     - name: Run pre-commit (lint/format)
       run: pre-commit run --all-files --show-diff-on-failure
 
-    - name: Run Ruff Linter
-      run: ruff check .
-
     - name: Run Tests
-      run: pytest -v
+      run: pytest

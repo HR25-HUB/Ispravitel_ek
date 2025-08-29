@@ -1,7 +1,7 @@
 # 📦 Бот «Исправитель»
 
-\[!\[CI]\(https://github\.com/my-org/bot_ispravitel/actions/workflows/ci\.yml/badge\.svg\?branch=main\)]\(https://github\.com/my-org/bot_ispravitel/actions/workflows/ci\.yml\)
-_Замените `my-org/bot_ispravitel` на ваш GitHub `my-org/bot_ispravitel` после публикации репозитория._
+[![CI](https://github.com/HR25-HUB/Ispravitel_ek/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HR25-HUB/Ispravitel_ek/actions/workflows/ci.yml)
+_Бейдж указывает на GitHub Actions этого репозитория._
 
 Автоматический бот для сверки и исправления номенклатуры между 1С-КА и catalogApp.
 Использует uv + ruff для управления зависимостями и линтинга.
@@ -138,10 +138,10 @@ python agent.py
 
 ## 🛠️ CI (GitHub Actions)
 
-В репозитории настроен минимальный CI (`.github/workflows/ci.yml`), который запускается на `push` и `pull_request` в ветку `main` и выполняет:
+В репозитории настроен CI (`.github/workflows/ci.yml`), который запускается на `push` и `pull_request` в ветку `main` и выполняет:
  
-- Линт и формат: `pre-commit` и `ruff check .`
-- Тесты: `pytest -v`
+- Линт и формат: `pre-commit` (включает `ruff` и `ruff-format`)
+- Тесты: `pytest` (настройки берутся из `pytest.ini`)
 - Кэш Python-зависимостей через `actions/setup-python` (ускоряет сборку)
  
 Бейдж статуса CI отображён вверху README.
