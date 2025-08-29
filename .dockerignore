@@ -1,0 +1,21 @@
+# Ignore files not needed in image
+.git
+.gitignore
+.vscode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.log
+.env
+.env.*
+.cache
+.mypy_cache
+.pytest_cache
+.dist
+build
+coverage
+htmlcov
+reports
+*.xlsx

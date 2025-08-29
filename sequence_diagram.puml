@@ -1,0 +1,30 @@
+@startuml
+title Последовательность шагов — Бот "Исправитель"
+
+actor Agent
+participant "Excel (1С-КА)" as Excel
+participant "Bot" as Bot
+participant "catalogApp API" as Catalog
+participant "LCSC.com" as LCSC
+participant "LLM (coze.com)" as LLM
+participant "Отчёт (Excel)" as Report
+
+Agent -> Excel : Выгрузка XLSX
+Excel -> Bot : Импорт данных (pandas/openpyxl)
+
+Bot -> Catalog : Проверка partnumber
+alt Совпадение найдено
+    Catalog -> Bot : Карточки найдены
+    Bot -> Catalog : Обновление при расхождениях
+else Нет совпадения
+    Catalog -> Bot : Совпадений нет
+    Bot -> LCSC : Поиск через Selenium
+    LCSC -> Bot : HTML-результаты
+    Bot -> LLM : Категория, бренд, свойства
+    LLM -> Bot : Нормализованные данные (ГН, ВН)
+    Bot -> Catalog : Создание новой карточки
+end
+
+Bot -> Report : Формирование Excel-отчёта
+Report -> Agent : Отчёт доступен
+@enduml

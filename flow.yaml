@@ -1,0 +1,69 @@
+flowspec:
+  name: bot-ispravitel-flow
+  version: 0.1.0
+  description: >
+    Бизнес-процесс сверки и исправления номенклатуры между 1С-КА (Excel)
+    и PIM-системой catalogApp с использованием эталонного источника LCSC и LLM.
+
+  actors:
+    - name: Agent
+      role: Автоматически выгружает Excel из 1С и инициирует процесс
+    - name: Bot
+      role: Обрабатывает данные и управляет API-вызовами
+    - name: Analyst
+      role: Просматривает отчёты и аналитику
+    - name: Admin
+      role: Настраивает API-ключи, расписание, конфигурацию
+
+  steps:
+    - id: import_excel
+      name: Импорт Excel
+      input: XLSX/XLS из 1С-КА
+      output: JSON-строки (partnumber, brand, ГН, ВН, внешний ID)
+      tool: pandas/openpyxl
+
+    - id: check_catalogapp
+      name: Проверка в catalogApp
+      input: partnumber
+      output: найденные карточки
+      tool: API catalogApp
+
+    - id: handle_missing
+      name: Поиск отсутствующих товаров
+      input: partnumber без совпадения
+      output: HTML-страница LCSC
+      tool: Selenium + BeautifulSoup
+
+    - id: normalize_llm
+      name: Нормализация через LLM
+      input: категория, бренд, свойства
+      output: нормализованные ГН и ВН
+      tool: coze.com API
+
+    - id: update_catalog
+      name: Обновление catalogApp
+      input: нормализованные данные
+      output: созданные/исправленные карточки
+      tool: API catalogApp
+
+    - id: reporting
+      name: Формирование отчёта
+      input: результаты обработки
+      output: Excel-отчёт + логи
+      tool: pandas/xlsxwriter
+
+  flow:
+    - from: import_excel
+      to: check_catalogapp
+    - from: check_catalogapp
+      to: handle_missing
+      condition: "если нет совпадения"
+    - from: handle_missing
+      to: normalize_llm
+    - from: normalize_llm
+      to: update_catalog
+    - from: check_catalogapp
+      to: update_catalog
+      condition: "если есть расхождения"
+    - from: update_catalog
+      to: reporting

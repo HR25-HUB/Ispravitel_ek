@@ -1,0 +1,2 @@
+# Запуск агента ежедневно в 03:00
+0 3 * * * root cd /app && /usr/local/bin/python agent.py >> /proc/1/fd/1 2>&1

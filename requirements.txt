@@ -1,0 +1,12 @@
+pandas
+openpyxl
+requests
+selenium
+beautifulsoup4
+lxml
+python-dotenv
+xlsxwriter
+schedule
+pytest
+streamlit
+matplotlib

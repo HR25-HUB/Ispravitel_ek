@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  # Development profile: mounts source code for rapid iteration
+  bot:
+    build: .
+    container_name: bot_ispravitel
+    restart: always
+    env_file: .env
+    volumes:
+      - .:/app
+    profiles: ["dev"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep cron >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Production-like profile: immutable image, no bind-mounts
+  bot-prod:
+    build: .
+    container_name: bot_ispravitel_prod
+    restart: always
+    env_file: .env
+    profiles: ["prod"]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep cron >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional UI service (Streamlit)
+  ui:
+    build: .
+    container_name: bot_ispravitel_ui
+    restart: unless-stopped
+    env_file: .env
+    command: sh -lc "uv pip install -r requirements.txt && streamlit run ui_streamlit.py --server.port=${STREAMLIT_PORT:-8501} --server.address=0.0.0.0"
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    profiles: ["ui", "dev"]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport sys, urllib.request\ntry:\n    urllib.request.urlopen('http://localhost:8501', timeout=2)\nexcept Exception as e:\n    sys.exit(1)\nelse:\n    sys.exit(0)\nPY"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
