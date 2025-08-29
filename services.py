@@ -4,6 +4,8 @@ from typing import Any, Protocol
 
 from catalog_api import CatalogAPI
 from config import Config, load_config
+from lcsc_client import LCSCClientReal
+from llm_client import LLMClientReal
 
 try:
     from mocks.catalog_api_mock import CatalogAPIMock
@@ -56,16 +58,20 @@ class LCSCClient(Protocol):
 
 
 def get_lcsc_client(cfg: Config | None = None) -> LCSCClient:
-    """Return an LCSC client according to config (mock for now)."""
-    try:
-        cfg = cfg or load_config()
-    except Exception as exc:
-        # If config validation fails in real mode, tests expect NotImplementedError for real client
-        raise NotImplementedError("Real LCSC client is not implemented yet") from exc
+    """Return an LCSC client according to config (mock or real)."""
+    cfg = cfg or load_config()
     if cfg.use_mocks and LCSCMock is not None:
         return LCSCMock(profile=cfg.mock_profile, seed=cfg.seed)
-    # Real LCSC client not implemented yet
-    raise NotImplementedError("Real LCSC client is not implemented yet")
+    # Real client
+    return LCSCClientReal(
+        base_url=cfg.lcsc_api_url or "",
+        api_key=cfg.lcsc_api_key,
+        timeout_sec=cfg.lcsc_timeout_sec,
+        retries=cfg.lcsc_retries,
+        backoff_base_ms=cfg.lcsc_backoff_base_ms,
+        backoff_max_ms=cfg.lcsc_backoff_max_ms,
+        backoff_jitter_ms=cfg.lcsc_backoff_jitter_ms,
+    )
 
 
 class LLMClient(Protocol):
@@ -77,13 +83,17 @@ class LLMClient(Protocol):
 
 
 def get_llm_client(cfg: Config | None = None) -> LLMClient:
-    """Return an LLM client according to config (mock for now)."""
-    try:
-        cfg = cfg or load_config()
-    except Exception as exc:
-        # If config validation fails in real mode, tests expect NotImplementedError for real client
-        raise NotImplementedError("Real LLM client is not implemented yet") from exc
+    """Return an LLM client according to config (mock or real)."""
+    cfg = cfg or load_config()
     if cfg.use_mocks and LLMMock is not None:
         return LLMMock(seed=cfg.seed)
-    # Real LLM client not implemented yet
-    raise NotImplementedError("Real LLM client is not implemented yet")
+    # Real client
+    return LLMClientReal(
+        base_url=cfg.coze_api_url or "",
+        api_key=cfg.coze_api_key,
+        timeout_sec=cfg.llm_timeout_sec,
+        retries=cfg.llm_retries,
+        backoff_base_ms=cfg.llm_backoff_base_ms,
+        backoff_max_ms=cfg.llm_backoff_max_ms,
+        backoff_jitter_ms=cfg.llm_backoff_jitter_ms,
+    )

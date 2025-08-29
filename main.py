@@ -1,24 +1,42 @@
-import json
-import random
-import time
-
 from config import load_config
-from import_excel import load_excel, validate_input
+from import_excel import load_excel
 from logger import get_logger, init_logging
+from metrics import MetricsCollector
+from pipeline import ProcessingPipeline
 from reporter import save_report
 from services import get_catalog_client, get_lcsc_client, get_llm_client
+from validators import DataValidator, SchemaValidator
 
 
 def process_rows(data, cfg):
     """Общий поток обработки строк данных. Возвращает список результатов.
 
-    Использует фабрики клиентов из services.py и конфиг cfg.
+    Использует рефакторированный ProcessingPipeline с метриками для мониторинга.
     """
-    log = get_logger("pipeline")
+    log = get_logger("main")
+    metrics = MetricsCollector()
+    
+    # Валидация схемы данных
+    if data:
+        columns = set(data[0].keys())
+        schema_validator = SchemaValidator()
+        schema_result = schema_validator.validate_schema(columns)
+        
+        if not schema_result.is_valid:
+            log.error("[validation] Schema validation failed: %s", schema_result.errors)
+            return []
+        
+        if schema_result.warnings:
+            log.warning("[validation] Schema warnings: %s", schema_result.warnings)
+    
     # Валидация входных данных: отделяем невалидные строки, добавляем предупреждения
-    valid_rows, invalid_rows = validate_input(data)
+    validator = DataValidator()
+    valid_rows, invalid_rows = validator.validate_batch(data)
     log.info("[validation] valid=%s invalid=%s", len(valid_rows), len(invalid_rows))
+    
+    metrics.set_total_rows(len(data))
 
+    # Инициализация клиентов
     catalog = get_catalog_client(cfg)
     lcsc = None
     llm = None
@@ -31,137 +49,34 @@ def process_rows(data, cfg):
         llm = get_llm_client(cfg)
     except Exception:  # pragma: no cover - реальный клиент не реализован
         llm = None
-    log.info("[init] clients: catalog=%s lcsc=%s llm=%s", type(catalog).__name__, type(lcsc).__name__ if lcsc else None, type(llm).__name__ if llm else None)
+    log.info("[init] clients: catalog=%s lcsc=%s llm=%s", 
+             type(catalog).__name__, 
+             type(lcsc).__name__ if lcsc else None, 
+             type(llm).__name__ if llm else None)
 
+    # Создание пайплайна обработки
+    pipeline = ProcessingPipeline(cfg, catalog, lcsc, llm)
+    
     results = []
     # Уже аннотированные невалидные строки просто переносим в отчет
     results.extend(invalid_rows)
 
-    def _retry(callable_, *args, attempts: int = 3, errors_list: list | None = None, tag: str = ""):
-        last_exc = None
-        for i in range(1, attempts + 1):
+    # Обработка валидных строк через пайплайн с метриками
+    with metrics.processing_timer():
+        for row in valid_rows:
             try:
-                return callable_(*args)
-            except Exception as e:  # pragma: no cover - behavior depends on mock profiles
-                last_exc = e
-                if errors_list is not None:
-                    errors_list.append(f"{tag}:{type(e).__name__}:attempt{i}")
-                if i < attempts:
-                    # exponential backoff with jitter from config
-                    base = getattr(cfg, "backoff_base_ms", 100)
-                    max_ms = getattr(cfg, "backoff_max_ms", 2000)
-                    jitter = getattr(cfg, "backoff_jitter_ms", 100)
-                    delay_ms = min(max_ms, base * (2 ** (i - 1)))
-                    delay_ms += random.randint(0, jitter) if jitter > 0 else 0
-                    time.sleep(delay_ms / 1000.0)
-        if last_exc:
-            raise last_exc
-
-    for row in valid_rows:
-        try:
-            part = str(row.get("partnumber", "")).strip()
-            brand = str(row.get("brand", "")).strip()
-
-            decision = {"action": "skip", "reason": "no_partnumber"}
-            enriched = {}
-            found_flag = False
-            confidence_val = None
-            attrs_norm: dict = {}
-            errors: list[str] = []
-
-            if not part:
-                row.update({"status": decision["action"], "reason": decision["reason"]})
+                processed_row = pipeline.process_single_row(row)
+                metrics.add_result(processed_row)
+                results.append(processed_row)
+            except Exception as e:
+                # Любая непредвиденная ошибка — не блокировать партию
+                log.error("[main] Unexpected error processing row: %s", e)
+                row.update({"status": "error", "reason": f"row_failed: {type(e).__name__}"})
+                metrics.add_result(row)
                 results.append(row)
-                continue
-
-            # 1) Поиск в catalogApp (с ретраями)
-            try:
-                found = _retry(catalog.search_product, part, attempts=3, errors_list=errors, tag="catalog_search")
-            except Exception:
-                found = []
-
-            if found:
-                # Простейшая логика: если бренд отличается — готовим обновление
-                best = found[0]
-                found_flag = True
-                if brand and best.get("brand") and best.get("brand") != brand:
-                    if hasattr(catalog, "update_product"):
-                        try:
-                            _retry(catalog.update_product, best.get("id"), {"brand": brand}, attempts=3, errors_list=errors, tag="catalog_update")  # type: ignore[attr-defined]
-                            decision = {"action": "update", "reason": "brand_mismatch"}
-                            log.info("[catalog] update id=%s brand=%s->%s", best.get("id"), best.get("brand"), brand)
-                        except Exception:
-                            decision = {"action": "conflict", "reason": "update_failed"}
-                    else:
-                        decision = {"action": "conflict", "reason": "update_not_supported"}
-                else:
-                    decision = {"action": "skip", "reason": "already_present"}
-            else:
-                # 2) Фоллбек к LCSC
-                candidates = []
-                # Маркируем как не найдено в каталоге — может быть перезаписано более строгими причинами (напр., low_confidence)
-                decision = {"action": "skip", "reason": "not_found"}
-                if lcsc is not None:
-                    try:
-                        candidates = _retry(lcsc.search, part, attempts=3, errors_list=errors, tag="lcsc_search")
-                        log.info("[lcsc] candidates=%s for part=%s", len(candidates), part)
-                    except Exception:
-                        candidates = []
-
-                # 3) Нормализация/классификация
-                norm = {}
-                if llm is not None:
-                    try:
-                        text = f"{part} {brand}".strip()
-                        norm = llm.normalize(text)
-                        attrs_norm = norm.get("attrs") or {}
-                        classif = llm.classify(["ГН1", "ГН2", "ГН3"], ["ВН1", "ВН2", "ВН3"], text)
-                        confidence_val = classif.get("confidence")
-                        if (confidence_val or 0.0) < cfg.confidence_threshold:
-                            decision = {"action": "skip", "reason": "low_confidence"}
-                            log.info("[llm] low_confidence=%.3f threshold=%.3f part=%s", confidence_val or 0.0, cfg.confidence_threshold, part)
-                        else:
-                            enriched.update({"gn": classif.get("gn"), "vn": classif.get("vn")})
-                            log.info("[llm] ok gn=%s vn=%s conf=%.3f", classif.get("gn"), classif.get("vn"), confidence_val or 0.0)
-                    except Exception as e:
-                        errors.append(f"llm:{type(e).__name__}")
-
-                # 4) Создание в каталоге — только если поддерживается мок-клиентом
-                # Не создаем при низкой уверенности
-                if (
-                    decision["action"] == "skip"
-                    and decision.get("reason") == "not_found"
-                    and hasattr(catalog, "create_product")
-                ):
-                    try:
-                        payload = {
-                            "partnumber": part,
-                            "name": norm.get("local_name") or part,
-                            "brand": brand or (candidates[0]["brand"] if candidates else ""),
-                            "attrs": attrs_norm or {},
-                        }
-                        _retry(catalog.create_product, payload, attempts=3, errors_list=errors, tag="catalog_create")  # type: ignore[attr-defined]
-                        decision = {"action": "create", "reason": "not_found"}
-                        log.info("[catalog] create part=%s brand=%s", part, payload.get("brand"))
-                    except Exception:
-                        decision = {"action": "conflict", "reason": "create_failed"}
-
-            # Записываем результат строки
-            row.update({
-                "status": decision["action"],
-                "action": decision["action"],
-                "reason": decision["reason"],
-                "found_in_catalog": found_flag,
-                "confidence": confidence_val if confidence_val is not None else "",
-                "attrs_norm": json.dumps(attrs_norm, ensure_ascii=False) if attrs_norm else "",
-                "errors": ";".join(errors) if errors else "",
-                **enriched,
-            })
-            results.append(row)
-        except Exception as e:
-            # Любая непредвиденная ошибка — не блокировать партию
-            row.update({"status": "error", "reason": f"row_failed: {type(e).__name__}"})
-            results.append(row)
+    
+    # Логирование сводки метрик
+    metrics.log_summary()
 
     return results
 
@@ -174,7 +89,14 @@ def main():
     logger.info("[startup] input_path=%s", input_path)
     data = load_excel(input_path)
     results = process_rows(data, cfg)
-    report = save_report(results)
+    
+    # Передача метрик в отчет
+    metrics_collector = MetricsCollector()
+    for result in results:
+        if result.get("status") != "skip" or result.get("reason", "").startswith("invalid_input"):
+            metrics_collector.add_result(result)
+    
+    report = save_report(results, metrics=metrics_collector.get_metrics())
     if report:
         logger.info("[report] saved to %s", report)
     else:

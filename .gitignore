@@ -24,6 +24,7 @@ dist/
 htmlcov/
 coverage.xml
 reports/
+!reports/.gitkeep
 
 # Notebooks
 .ipynb_checkpoints/
@@ -35,3 +36,4 @@ reports/
 *.xlsx
 *.csv
 *.sqlite3
+!tests/sample.xlsx

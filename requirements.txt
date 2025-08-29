@@ -11,3 +11,5 @@ pytest
 pytest-cov
 streamlit
 matplotlib
+aiohttp>=3.8.0
+asyncio

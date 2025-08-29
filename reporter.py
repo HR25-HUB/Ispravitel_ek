@@ -1,15 +1,24 @@
 import json
+from pathlib import Path
 
 import pandas as pd
 
 from logger import generate_run_id, get_logger
+from metrics import ProcessingMetrics
 
 
-def save_report(data: list, filename: str = None):
+def save_report(data: list, filename: str = None, metrics: ProcessingMetrics = None):
     log = get_logger("reporter")
     if not filename:
         run_id = generate_run_id()
-        filename = f"report_{run_id}.xlsx"
+        # Ensure reports directory exists and save into it by default
+        reports_dir = Path("reports")
+        try:
+            reports_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Directory creation failure should not block report creation; fallback to current directory
+            reports_dir = Path(".")
+        filename = str(reports_dir / f"report_{run_id}.xlsx")
     try:
         df = pd.DataFrame(data)
         # Ensure attrs_norm is a JSON string when present
@@ -51,12 +60,47 @@ def save_report(data: list, filename: str = None):
         with writer as writer:
             df.to_excel(writer, index=False, sheet_name="data")
 
-            # Basic metrics
+            # Enhanced metrics with ProcessingMetrics integration
             sections = []
             try:
                 total = len(df)
                 sections.append(pd.DataFrame({"metric": ["total_rows"], "value": [total]}))
 
+                # Add ProcessingMetrics summary if available
+                if metrics:
+                    summary = metrics.get_summary()
+                    
+                    # Performance metrics
+                    perf_metrics = pd.DataFrame({
+                        "metric": ["processing_time_sec", "avg_row_time_sec", "success_rate_percent"],
+                        "value": [summary["processing_time"], summary["avg_row_time"], summary["success_rate"]]
+                    })
+                    sections.append(perf_metrics)
+                    
+                    # Action metrics
+                    action_metrics = pd.DataFrame({
+                        "metric": ["created", "updated", "skipped", "conflicts"],
+                        "value": [summary["actions"]["created"], summary["actions"]["updated"], 
+                                 summary["actions"]["skipped"], summary["actions"]["conflicts"]]
+                    })
+                    sections.append(action_metrics)
+                    
+                    # Error metrics
+                    error_metrics = pd.DataFrame({
+                        "metric": ["catalog_errors", "lcsc_errors", "llm_errors"],
+                        "value": [summary["errors"]["catalog"], summary["errors"]["lcsc"], summary["errors"]["llm"]]
+                    })
+                    sections.append(error_metrics)
+                    
+                    # Confidence metrics
+                    if summary["confidence"]["count"] > 0:
+                        conf_metrics = pd.DataFrame({
+                            "metric": ["avg_confidence", "confidence_samples"],
+                            "value": [summary["confidence"]["average"], summary["confidence"]["count"]]
+                        })
+                        sections.append(conf_metrics)
+
+                # Standard counts from data
                 if "status" in df.columns:
                     status_counts = df["status"].value_counts(dropna=False).rename_axis("status").reset_index(name="count")
                     status_counts.insert(0, "section", "status_counts")

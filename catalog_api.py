@@ -42,3 +42,36 @@ class CatalogAPI:
                 continue
         # After retries, degrade gracefully with empty list
         return []
+
+    def create_product(self, payload: dict):
+        url = f"{self.base_url}/products"
+        for attempt in range(1, self.retries + 1):
+            try:
+                resp = requests.post(url, json=payload, headers=self.headers, timeout=self.timeout_sec)
+                if resp.status_code in (200, 201):
+                    return resp.json() if resp.headers.get("Content-Type", "").startswith("application/json") else {"status": "ok"}
+                # treat as failure but no raise
+                return None
+            except (requests.Timeout, requests.RequestException):
+                if attempt < self.retries:
+                    delay_ms = min(self.backoff_max_ms, self.backoff_base_ms * (2 ** (attempt - 1)))
+                    delay_ms += random.randint(0, self.backoff_jitter_ms) if self.backoff_jitter_ms > 0 else 0
+                    time.sleep(delay_ms / 1000.0)
+                continue
+        return None
+
+    def update_product(self, product_id: str | int, patch: dict):
+        url = f"{self.base_url}/products/{product_id}"
+        for attempt in range(1, self.retries + 1):
+            try:
+                resp = requests.patch(url, json=patch, headers=self.headers, timeout=self.timeout_sec)
+                if resp.status_code in (200, 204):
+                    return True
+                return False
+            except (requests.Timeout, requests.RequestException):
+                if attempt < self.retries:
+                    delay_ms = min(self.backoff_max_ms, self.backoff_base_ms * (2 ** (attempt - 1)))
+                    delay_ms += random.randint(0, self.backoff_jitter_ms) if self.backoff_jitter_ms > 0 else 0
+                    time.sleep(delay_ms / 1000.0)
+                continue
+        return False

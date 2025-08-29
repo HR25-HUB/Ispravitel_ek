@@ -22,9 +22,23 @@ class Config:
     catalog_backoff_max_ms: int
     catalog_backoff_jitter_ms: int
 
-    # LLM / Coze
+    # LCSC (real client)
+    lcsc_api_url: Optional[str]
+    lcsc_api_key: Optional[str]
+    lcsc_timeout_sec: float
+    lcsc_retries: int
+    lcsc_backoff_base_ms: int
+    lcsc_backoff_max_ms: int
+    lcsc_backoff_jitter_ms: int
+
+    # LLM service (generic, e.g., Coze/OpenAI proxy)
     coze_api_url: Optional[str]
     coze_api_key: Optional[str]
+    llm_timeout_sec: float
+    llm_retries: int
+    llm_backoff_base_ms: int
+    llm_backoff_max_ms: int
+    llm_backoff_jitter_ms: int
     confidence_threshold: float
 
     # Mocks and determinism
@@ -91,6 +105,9 @@ def _validate(cfg: Config) -> None:
                 "CATALOG_API_URL": cfg.catalog_api_url,
                 "CATALOG_API_KEY": cfg.catalog_api_key,
                 "CATALOG_ID": cfg.catalog_id,
+                # Optional but recommended for real integrations; warn-like validation kept simple
+                "LCSC_API_URL": cfg.lcsc_api_url,
+                "COZE_API_URL": cfg.coze_api_url,
             }.items()
             if not v
         ]
@@ -142,9 +159,22 @@ def load_config(override_dotenv_path: Optional[str] = None) -> Config:
         catalog_backoff_base_ms=_get_int("CATALOG_BACKOFF_BASE_MS", 100),
         catalog_backoff_max_ms=_get_int("CATALOG_BACKOFF_MAX_MS", 2000),
         catalog_backoff_jitter_ms=_get_int("CATALOG_BACKOFF_JITTER_MS", 100),
-        # Coze
+        # LCSC
+        lcsc_api_url=os.getenv("LCSC_API_URL"),
+        lcsc_api_key=os.getenv("LCSC_API_KEY"),
+        lcsc_timeout_sec=_get_float("LCSC_TIMEOUT_SEC", 10.0),
+        lcsc_retries=_get_int("LCSC_RETRIES", 3),
+        lcsc_backoff_base_ms=_get_int("LCSC_BACKOFF_BASE_MS", 100),
+        lcsc_backoff_max_ms=_get_int("LCSC_BACKOFF_MAX_MS", 2000),
+        lcsc_backoff_jitter_ms=_get_int("LCSC_BACKOFF_JITTER_MS", 100),
+        # LLM (Coze)
         coze_api_url=os.getenv("COZE_API_URL"),
         coze_api_key=os.getenv("COZE_API_KEY"),
+        llm_timeout_sec=_get_float("LLM_TIMEOUT_SEC", 15.0),
+        llm_retries=_get_int("LLM_RETRIES", 3),
+        llm_backoff_base_ms=_get_int("LLM_BACKOFF_BASE_MS", 100),
+        llm_backoff_max_ms=_get_int("LLM_BACKOFF_MAX_MS", 2000),
+        llm_backoff_jitter_ms=_get_int("LLM_BACKOFF_JITTER_MS", 100),
         confidence_threshold=_get_float("CONFIDENCE_THRESHOLD", 0.7),
         # Mocks
         use_mocks=use_mocks,

@@ -41,9 +41,9 @@
 - Диаграммы: см. `sequence_diagram.puml` и разделы в `ispravitel_context.md`.
 
 ## 7. Данные и валидация
-- Вход Excel: обязательные `partnumber`, `brand`; опционально `ГН`, `ВН`, `external_id`.
+- Вход Excel: обязательный `partnumber`; `brand` — рекомендуемое поле; опционально `ГН`, `ВН`, `external_id`.
 - Нормализованные поля: `category`, `global_name`, `local_name`, `attrs{}`.
-- Проверки: пустые значения, дубликаты `partnumber`, типы колонок; отчёт об ошибках.
+- Проверки: пустые значения, дубликаты `partnumber` (без учёта регистра), типы колонок; отчёт об ошибках. При отсутствующем `brand` добавляется предупреждение `validation:missing_brand`.
 
 ## 8. Контракты API (для мок-режима)
 - catalogApp:
@@ -79,13 +79,14 @@
   - POST `/v1/classify` → `{gn, vn, confidence}`
 
 ## 9. Режим моков
-- Фичефлаги: `USE_MOCKS=true|false`, `MOCK_PROFILE=happy|missing|conflict|errorrate10`, `SEED=42`.
+- Фичефлаги: `USE_MOCKS=true|false`, `MOCK_PROFILE=happy|missing|conflict|errorrate10|timeout`, `SEED=42`.
 - Фабрики клиентов: подставляют реальный/мок-клиент в `main.py` и `ui_streamlit.py`.
 - Сценарии:  
   - happy — 80% найдено в catalogApp, 20% через LCSC+LLM.  
   - missing — всё отсутствует, создаём через LCSC+LLM.  
-  - conflict — различия по ГН/ВН/attrs, пометка “CONFLICT”.  
-  - errorrate10 — 10% запросов — управляемые ошибки/таймауты.
+  - conflict — различия по ГН/ВН/attrs, возможна пометка “CONFLICT”.  
+  - errorrate10 — ~10% запросов — управляемые ошибки/таймауты.  
+  - timeout — операции клиентов (catalog/LCSC) детерминированно завершаются `TimeoutError` для тестирования ретраев и устойчивости.
 
 ## 10. Правила принятия решений
 - Если точное совпадение `partnumber` → сравнить `brand/ГН/ВН/external_id`.

@@ -2,7 +2,11 @@
 FROM python:3.11-slim
 
 # Установка зависимостей
-RUN apt-get update && apt-get install -y cron && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        cron \
+        procps \
+    && rm -rf /var/lib/apt/lists/*
 
 # Установка uv и ruff
 RUN pip install --no-cache-dir uv ruff
@@ -16,8 +20,8 @@ ENV PYTHONUNBUFFERED=1 \
 # Копируем проект
 COPY . .
 
-# Установка зависимостей через uv
-RUN uv pip install -r requirements.txt
+# Установка зависимостей через uv (в системную среду внутри контейнера)
+RUN uv pip install --system -r requirements.txt
 
 # Копируем cron-файл и добавляем задачу
 COPY crontab.txt /etc/cron.d/bot-cron

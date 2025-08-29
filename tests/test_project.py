@@ -38,6 +38,9 @@ def test_main_generates_report(tmp_path):
     result = subprocess.run(["python", "main.py"], capture_output=True, text=True)
     assert result.returncode == 0
 
-    # Проверяем, что создан отчет
-    reports = [f for f in os.listdir() if f.startswith("report_") and f.endswith(".xlsx")]
-    assert len(reports) > 0
+    # Проверяем, что создан отчет (в корне или в папке reports/)
+    reports_root = [f for f in os.listdir() if f.startswith("report_") and f.endswith(".xlsx")]
+    reports_dir = []
+    if os.path.isdir("reports"):
+        reports_dir = [f for f in os.listdir("reports") if f.startswith("report_") and f.endswith(".xlsx")]
+    assert len(reports_root) + len(reports_dir) > 0

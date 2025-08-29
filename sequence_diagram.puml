@@ -1,12 +1,12 @@
-@startuml
-title Последовательность шагов — Бот "Исправитель"
+@startuml sequence_bot_ispravitel
+title Последовательность шагов — Бот "Исправитель" (текущий этап: моки)
 
 actor Agent
 participant "Excel (1С-КА)" as Excel
 participant "Bot" as Bot
 participant "catalogApp API" as Catalog
-participant "LCSC.com" as LCSC
-participant "LLM (coze.com)" as LLM
+participant "LCSC (mock)" as LCSC
+participant "LLM (mock)" as LLM
 participant "Отчёт (Excel)" as Report
 
 Agent -> Excel : Выгрузка XLSX
@@ -18,10 +18,10 @@ alt Совпадение найдено
     Bot -> Catalog : Обновление при расхождениях
 else Нет совпадения
     Catalog -> Bot : Совпадений нет
-    Bot -> LCSC : Поиск через Selenium
-    LCSC -> Bot : HTML-результаты
-    Bot -> LLM : Категория, бренд, свойства
-    LLM -> Bot : Нормализованные данные (ГН, ВН)
+    Bot -> LCSC : Поиск кандидатов (mock)
+    LCSC -> Bot : Кандидаты (brand/category/attrs)
+    Bot -> LLM : Нормализация/классификация (mock)
+    LLM -> Bot : Нормализованные данные (ГН, ВН, attrs)
     Bot -> Catalog : Создание новой карточки
 end
 
